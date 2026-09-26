@@ -74,6 +74,15 @@ then the `org.freecad.FreeCAD` Flatpak). Override it with:
 freecad-mcp --freecadcmd "flatpak run --command=freecadcmd org.freecad.FreeCAD"
 ```
 
+### Where the temporary script is written
+
+The script file must be readable by the FreeCAD process. By default it goes to
+`~/.cache/freecad-mcp/headless`, except for a Snap FreeCAD, whose confinement
+hides dot-directories in `$HOME`; for Snap the script goes to
+`~/snap/<snap name>/common/freecad-mcp-headless` instead. Set
+`FREECAD_MCP_SCRIPT_DIR` to choose the directory yourself, for example when the
+sandbox only exposes some other path.
+
 ## GUI dispatch timeouts
 
 GUI-thread operations run one at a time in FIFO order. Calls have separate queue

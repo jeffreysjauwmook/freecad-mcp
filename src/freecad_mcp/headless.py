@@ -47,9 +47,31 @@ def parse_command(value: str | None) -> list[str] | None:
     return shlex.split(value) if value else None
 
 
-def _script_dir() -> Path:
+def _snap_name(command: list[str] | None) -> str | None:
+    """Return the snap name when ``command`` runs FreeCAD from a snap."""
+    if not command:
+        return None
+    exe = command[0]
+    name = Path(exe).name
+    if exe.startswith("/snap/") or name.endswith(".cmd") and "/snap/bin/" in exe:
+        # /snap/bin/freecad.cmd -> freecad, /snap/bin/freecad -> freecad
+        return name.split(".")[0] or None
+    return None
+
+
+def _script_dir(command: list[str] | None = None) -> Path:
     # Flatpak sandboxes usually see $HOME but not /tmp, so keep scripts under HOME.
-    d = Path.home() / ".cache" / "freecad-mcp" / "headless"
+    override = os.environ.get("FREECAD_MCP_SCRIPT_DIR")
+    if override:
+        d = Path(override).expanduser()
+    else:
+        snap = _snap_name(command)
+        if snap:
+            # Snap confinement hides dot-directories in $HOME from the snap, so
+            # ~/.cache is unreadable to it; its own data directory is not.
+            d = Path.home() / "snap" / snap / "common" / "freecad-mcp-headless"
+        else:
+            d = Path.home() / ".cache" / "freecad-mcp" / "headless"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -80,7 +102,7 @@ def run_headless(code: str, timeout: float, command: list[str] | None) -> dict[s
             "error": "freecadcmd not found: install FreeCAD, or pass --freecadcmd to freecad-mcp",
         }
     with tempfile.NamedTemporaryFile(
-        "w", suffix=".py", dir=_script_dir(), delete=False, encoding="utf-8"
+        "w", suffix=".py", dir=_script_dir(command), delete=False, encoding="utf-8"
     ) as f:
         f.write(code)
         script = f.name

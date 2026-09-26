@@ -5,6 +5,7 @@ import pytest
 
 import freecad_mcp.headless as headless
 
+from freecad_mcp.headless import _script_dir as real_script_dir
 from freecad_mcp.headless import parse_command, run_headless
 from freecad_mcp.operations.core import format_headless_result
 
@@ -13,7 +14,7 @@ PY = [sys.executable]  # stands in for freecadcmd: both accept `-c <code>`
 
 @pytest.fixture(autouse=True)
 def temporary_scripts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(headless, "_script_dir", lambda: tmp_path)
+    monkeypatch.setattr(headless, "_script_dir", lambda command=None: tmp_path)
 
 
 def test_success_returns_output() -> None:
@@ -113,3 +114,23 @@ def test_parse_command() -> None:
     assert parse_command("flatpak run --command=freecadcmd org.freecad.FreeCAD") == [
         "flatpak", "run", "--command=freecadcmd", "org.freecad.FreeCAD",
     ]
+
+
+def test_script_dir_avoids_hidden_cache_for_snap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Snap confinement cannot read ~/.cache, so scripts go to the snap's own data dir.
+    monkeypatch.delenv("FREECAD_MCP_SCRIPT_DIR", raising=False)
+    monkeypatch.setattr(headless.Path, "home", staticmethod(lambda: tmp_path))
+    d = real_script_dir(["/snap/bin/freecad.cmd"])
+    assert d == tmp_path / "snap" / "freecad" / "common" / "freecad-mcp-headless"
+    assert d.is_dir()
+
+
+def test_script_dir_defaults_to_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("FREECAD_MCP_SCRIPT_DIR", raising=False)
+    monkeypatch.setattr(headless.Path, "home", staticmethod(lambda: tmp_path))
+    assert real_script_dir(["/usr/bin/freecadcmd"]) == tmp_path / ".cache" / "freecad-mcp" / "headless"
+
+
+def test_script_dir_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FREECAD_MCP_SCRIPT_DIR", str(tmp_path / "staging"))
+    assert real_script_dir(["/snap/bin/freecad.cmd"]) == tmp_path / "staging"
